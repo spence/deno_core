@@ -1393,7 +1393,7 @@ impl JsRuntime {
     scope: &mut v8::HandleScope,
     function: &v8::Global<v8::Function>,
   ) -> impl Future<Output = Result<v8::Global<v8::Value>, Error>> {
-    Self::scoped_call_with_args(scope, function, &[])
+    Self::scoped_call_with_args(scope, function, None, &[])
   }
 
   /// Call a function and returns a future resolving with the return value of the
@@ -1409,7 +1409,17 @@ impl JsRuntime {
     args: &[v8::Global<v8::Value>],
   ) -> impl Future<Output = Result<v8::Global<v8::Value>, Error>> {
     let scope = &mut self.handle_scope();
-    Self::scoped_call_with_args(scope, function, args)
+    Self::scoped_call_with_args(scope, function, None, args)
+  }
+
+  pub fn call_with_this_args(
+    &mut self,
+    function: &v8::Global<v8::Function>,
+    this: Option<&v8::Global<v8::Value>>,
+    args: &[v8::Global<v8::Value>],
+  ) -> impl Future<Output = Result<v8::Global<v8::Value>, Error>> {
+    let scope = &mut self.handle_scope();
+    Self::scoped_call_with_args(scope, function, this, args)
   }
 
   /// Call a function and returns a future resolving with the return value of the
@@ -1422,11 +1432,15 @@ impl JsRuntime {
   pub fn scoped_call_with_args(
     scope: &mut v8::HandleScope,
     function: &v8::Global<v8::Function>,
+    this: Option<&v8::Global<v8::Value>>,
     args: &[v8::Global<v8::Value>],
   ) -> impl Future<Output = Result<v8::Global<v8::Value>, Error>> {
     let scope = &mut v8::TryCatch::new(scope);
     let cb = function.open(scope);
-    let this = v8::undefined(scope).into();
+    let this: v8::Local<v8::Value> = match this {
+      None => v8::undefined(scope).into(),
+      Some(this) => v8::Local::new(scope, this),
+    };
     let promise = if args.is_empty() {
       cb.call(scope, this, &[])
     } else {
